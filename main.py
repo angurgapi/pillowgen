@@ -1,17 +1,27 @@
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, StreamingResponse
 import io, datetime
-
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
 from imagegen import draw_receipt_png_bytes
 
 app = FastAPI(title="Receipt Generator")
 
+BASE_DIR = Path(__file__).resolve().parent
+app = FastAPI(title="Receipt Generator")
+
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(BASE_DIR / "static" / "favicon.ico")
 FORM_HTML = f"""
 <!doctype html>
 <html>
   <head>
     <meta charset="utf-8"/>
     <title>Receipt Generator</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <style>
       * {{box-sizing: border-box}}
