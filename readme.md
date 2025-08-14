@@ -1,6 +1,6 @@
 # pillowgen — Payment Receipt Generator (FastAPI + Pillow)
 
-Generate a clean, single-item **PAID** receipt PNG from a tiny web form.  
+Generate a **PAID** receipt PNG for OCR & automatch testing purpose from a tiny web form.  
 No font installs, no database, no storage — just submit the form and download the image.
 
 ## ✨ Features
