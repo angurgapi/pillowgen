@@ -14,6 +14,7 @@ FORM_HTML = f"""
     <title>Receipt Generator</title>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <style>
+      * {{box-sizing: border-box}}
       body{{font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Ubuntu,Helvetica,Arial,sans-serif;
            background:#f8fafc;margin:0;padding:24px;}}
       .card{{max-width:720px;margin:0 auto;background:#fff;padding:24px;border-radius:12px;border:1px solid #e5e7eb}}
@@ -26,7 +27,7 @@ FORM_HTML = f"""
   </head>
   <body>
     <div class="card">
-      <h1>Payment Receipt Generator</h1>
+      <h1>Paid Receipt Generator</h1>
       <form method="post" action="/generate">
         <label>Company Name
           <input name="company_name" value="Your Company Name" required />
