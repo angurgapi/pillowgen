@@ -17,7 +17,7 @@ No font installs, no database, no storage — just submit the form and download 
 Requirements: **Python 3.8+**
 
 ```bash
-git clone <your-repo-url>
+git clone git@github.com:angurgapi/pillowgen.git
 cd pillowgen
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
