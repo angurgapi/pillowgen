@@ -1,25 +1,68 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, HTTPException, Depends
 from fastapi.responses import HTMLResponse, StreamingResponse
-import io, datetime
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
-from imagegen import draw_receipt_png_bytes, draw_receipt_pdf_bytes
-from form_template import get_invoice_form_html
+import io, datetime
 
-app = FastAPI(title="Receipt Generator")
+from models import InvoiceRequest
+from auth import verify_api_key
+from form_template import get_invoice_form_html
+from invoice_processor import process_invoice_data, generate_invoice_bytes
 
 BASE_DIR = Path(__file__).resolve().parent
-app = FastAPI(title="Receipt Generator")
+app = FastAPI(title="Invoice Generator API")
+
+# Enable CORS for external clients
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your frontend domains
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
     return FileResponse(BASE_DIR / "static" / "favicon.ico")
 
+
 @app.get("/", response_class=HTMLResponse)
 def form():
     return get_invoice_form_html()
+
+
+@app.get("/api/health")
+def health_check():
+    """Public health check endpoint"""
+    return {"status": "ok", "service": "invoice-generator"}
+
+
+@app.post("/api/generate")
+def generate_invoice_api(
+    invoice_data: InvoiceRequest,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    API endpoint to generate invoices from external clients.
+    Requires X-API-Key header with valid secret.
+    """
+    try:
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        processed_data = process_invoice_data(invoice_data)
+        invoice_bytes = generate_invoice_bytes(processed_data, invoice_data.format)
+        
+        ext = "pdf" if invoice_data.format == "pdf" else "png"
+        media_type = "application/pdf" if invoice_data.format == "pdf" else "image/png"
+        filename = f"invoice_{invoice_data.invoice_no}_{timestamp}.{ext}"
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        
+        return StreamingResponse(io.BytesIO(invoice_bytes), media_type=media_type, headers=headers)
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating invoice: {str(e)}")
 
 @app.post("/generate")
 def generate(
@@ -55,39 +98,10 @@ def generate(
 ):
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     
-    # Format dates for display (convert YYYY-MM-DD to readable format)
-    def format_date(date_str):
-        try:
-            date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-            return date_obj.strftime("%d %B %Y")
-        except:
-            return date_str
-    
-    formatted_invoice_date = format_date(invoice_date)
-    formatted_due_date = format_date(due_date)
-    
-    # Calculate totals
-    try:
-        qty = float(quantity)
-        price = float(unit_price)
-        tax = float(tax_rate)
-        disc = float(discount)
-        
-        subtotal = qty * price
-        discount_amount = subtotal * (disc / 100)
-        subtotal_after_discount = subtotal - discount_amount
-        tax_amount = subtotal_after_discount * (tax / 100)
-        total = subtotal_after_discount + tax_amount
-    except:
-        subtotal = 0
-        discount_amount = 0
-        tax_amount = 0
-        total = 0
-    
-    invoice_data = {
+    form_data = {
         "invoice_no": invoice_no,
-        "invoice_date": formatted_invoice_date,
-        "due_date": formatted_due_date,
+        "invoice_date": invoice_date,
+        "due_date": due_date,
         "payment_terms": payment_terms,
         "company_name": company_name,
         "company_address": company_address,
@@ -101,27 +115,20 @@ def generate(
         "currency": currency,
         "payment_method": payment_method,
         "item_description": item_description,
-        "quantity": qty,
-        "unit_price": price,
-        "subtotal": subtotal,
-        "discount": disc,
-        "discount_amount": discount_amount,
-        "tax_rate": tax,
-        "tax_amount": tax_amount,
-        "total": total,
+        "quantity": quantity,
+        "unit_price": unit_price,
+        "tax_rate": tax_rate,
+        "discount": discount,
         "notes": notes,
-        "is_paid": mark_paid == "yes"
+        "mark_paid": mark_paid
     }
     
-    if format == "pdf":
-        from imagegen import draw_invoice_pdf_bytes
-        pdf = draw_invoice_pdf_bytes(invoice_data)
-        filename = f"invoice_{invoice_no}_{timestamp}.pdf"
-        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
-        return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers=headers)
-    else:
-        from imagegen import draw_invoice_png_bytes
-        png = draw_invoice_png_bytes(invoice_data)
-        filename = f"invoice_{invoice_no}_{timestamp}.png"
-        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
-        return StreamingResponse(io.BytesIO(png), media_type="image/png", headers=headers)
+    processed_data = process_invoice_data(form_data, is_form_data=True)
+    invoice_bytes = generate_invoice_bytes(processed_data, format)
+    
+    ext = "pdf" if format == "pdf" else "png"
+    media_type = "application/pdf" if format == "pdf" else "image/png"
+    filename = f"invoice_{invoice_no}_{timestamp}.{ext}"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    
+    return StreamingResponse(io.BytesIO(invoice_bytes), media_type=media_type, headers=headers)
